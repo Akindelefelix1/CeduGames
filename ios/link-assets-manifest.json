@@ -1,0 +1,25 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assets/fonts/Baloo2-Bold.ttf",
+      "sha1": "118d4f7f8dddf7f248ebe9304ea4c4c672769702"
+    },
+    {
+      "path": "src/assets/fonts/Baloo2-ExtraBold.ttf",
+      "sha1": "706d96487314ba5ab98764505430227df0a4765f"
+    },
+    {
+      "path": "src/assets/fonts/Baloo2-Medium.ttf",
+      "sha1": "47a7aa028b50f584bbec860f1aa9f3d016b86e5a"
+    },
+    {
+      "path": "src/assets/fonts/Baloo2-Regular.ttf",
+      "sha1": "6eb0f1f62f29c097e090a476112b07771c1a8ea4"
+    },
+    {
+      "path": "src/assets/fonts/Baloo2-SemiBold.ttf",
+      "sha1": "23a4f694e305889e9eef94e44b51a5170bdfdd05"
+    }
+  ]
+}
