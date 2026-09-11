@@ -1,5 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Animated, Easing, FlatList, Image, ImageBackground, ListRenderItemInfo, NativeScrollEvent, NativeSyntheticEvent, Pressable, StatusBar, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 
@@ -24,9 +25,17 @@ const slides: Slide[] = [
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
-  const [done, setDone] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  return <SafeAreaProvider><StatusBar barStyle={showSplash ? 'light-content' : 'dark-content'} />{showSplash ? <AnimatedSplash onComplete={() => setShowSplash(false)} /> : showLogin ? <LoginWebView /> : done ? <Welcome onStart={() => setShowLogin(true)} /> : <Onboarding onComplete={() => setDone(true)} />}</SafeAreaProvider>;
+  useEffect(() => {
+    AsyncStorage.getItem('onboarding-complete').then(value => setOnboardingComplete(value === 'true')).catch(() => setOnboardingComplete(false));
+  }, []);
+  const completeOnboarding = () => {
+    setOnboardingComplete(true);
+    AsyncStorage.setItem('onboarding-complete', 'true').catch(() => undefined);
+  };
+  const loading = showSplash || onboardingComplete === null;
+  return <SafeAreaProvider><StatusBar barStyle={loading ? 'light-content' : 'dark-content'} />{loading ? <AnimatedSplash onComplete={() => setShowSplash(false)} /> : showLogin ? <LoginWebView /> : onboardingComplete ? <Welcome onStart={() => setShowLogin(true)} /> : <Onboarding onComplete={completeOnboarding} />}</SafeAreaProvider>;
 }
 
 function AnimatedSplash({onComplete}: {onComplete: () => void}) {
@@ -89,7 +98,7 @@ function Welcome({onStart}: {onStart: () => void}) {
 
 function LoginWebView() {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView source={{uri: 'https://cedugames-user.onrender.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView source={{uri: 'https://cedugames.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
 }
 
 const styles = StyleSheet.create({
