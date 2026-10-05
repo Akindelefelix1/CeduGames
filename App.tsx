@@ -7,20 +7,16 @@ import {WebView} from 'react-native-webview';
 const images = {
   logo: require('./src/assets/images/cedugames-logo.png'),
   splash: require('./src/assets/images/splash-background.png'),
-  learn: require('./src/assets/images/learn-through-play.png'),
-  adventure: require('./src/assets/images/age-adventure.png'),
   coin: require('./src/assets/images/reward-coin.png'),
   trophy: require('./src/assets/images/reward-trophy.png'),
-  math: require('./src/assets/images/math.png'),
-  english: require('./src/assets/images/english.png'),
   badge: require('./src/assets/images/badge.png'),
 };
 const colors = {red: '#F02229', orange: '#FA7E14', yellow: '#FECB03', blue: '#0177D2', purple: '#6336AA', pink: '#EF387E', ink: '#24123F', cream: '#FFF9EF'};
 type Slide = {id: string; eyebrow: string; title: string; description: string; color: string; pale: string; kind: 'learn' | 'adventure' | 'rewards'};
 const slides: Slide[] = [
-  {id: 'learn', eyebrow: 'LEARN THROUGH PLAY', title: 'Big ideas become fun games', description: 'Build confidence in Maths and English with quick challenges made to feel like playtime.', color: colors.blue, pale: '#EAF7FF', kind: 'learn'},
-  {id: 'adventure', eyebrow: 'MADE JUST FOR YOU', title: 'Choose your own adventure', description: 'Pick your age crew, explore colourful subjects, and move through levels at your perfect pace.', color: colors.purple, pale: '#F5ECFF', kind: 'adventure'},
-  {id: 'rewards', eyebrow: 'PLAY • GROW • SHINE', title: 'Every win feels rewarding', description: 'Earn fun coins, unlock rewards, grow your streak, and celebrate your place on the leaderboard.', color: colors.orange, pale: '#FFF4DE', kind: 'rewards'},
+  {id: 'learn', eyebrow: 'DISCOVER THROUGH PLAY', title: 'Every interest becomes a challenge', description: 'Explore quizzes, puzzles and activities across technology, science, culture, creativity and more.', color: colors.blue, pale: '#EAF7FF', kind: 'learn'},
+  {id: 'adventure', eyebrow: 'MADE FOR EVERYONE', title: 'Choose your own adventure', description: 'Follow your interests, choose your challenge level and keep growing at a pace that works for you.', color: colors.purple, pale: '#F5ECFF', kind: 'adventure'},
+  {id: 'rewards', eyebrow: 'PLAY • GROW • SHINE', title: 'Every win feels rewarding', description: 'Earn coins, unlock rewards, build your streak and celebrate your progress on the leaderboard.', color: colors.orange, pale: '#FFF4DE', kind: 'rewards'},
 ];
 
 function App() {
@@ -81,8 +77,8 @@ function Onboarding({onComplete}: {onComplete: () => void}) {
 
 function SlideArtwork({kind}: {kind: Slide['kind']}) {
   if (kind === 'rewards') return <RewardArtwork />;
-  if (kind === 'learn') return <View style={styles.learnScene}><View style={[styles.orbit, styles.orbitOne]} /><View style={[styles.orbit, styles.orbitTwo]} /><View style={[styles.subjectCard, styles.mathCard]}><Image source={images.math} style={styles.subjectIcon} resizeMode="contain" /><Text style={[styles.subjectLabel, {color: colors.blue}]}>MATHS</Text></View><View style={[styles.subjectCard, styles.englishCard]}><Image source={images.english} style={styles.subjectIcon} resizeMode="contain" /><Text style={[styles.subjectLabel, {color: colors.pink}]}>ENGLISH</Text></View><View style={styles.heroDisc}><Image source={images.learn} resizeMode="contain" style={styles.learnArt} /></View><View style={styles.xpChip}><Text style={styles.xpText}>+25 XP</Text></View></View>;
-  return <View style={styles.adventureScene}><View style={styles.rainbowOne} /><View style={styles.rainbowTwo} /><View style={styles.rainbowThree} /><View style={styles.adventurePortrait}><Image source={images.adventure} resizeMode="cover" style={styles.adventureArt} /></View><View style={[styles.ageChip, styles.ageChipOne]}><Text style={styles.ageChipText}>4-6</Text><Text style={styles.ageChipSub}>EXPLORER</Text></View><View style={[styles.ageChip, styles.ageChipTwo]}><Text style={styles.ageChipText}>7-9</Text><Text style={styles.ageChipSub}>ADVENTURER</Text></View><View style={[styles.ageChip, styles.ageChipThree]}><Text style={styles.ageChipText}>10+</Text><Text style={styles.ageChipSub}>CHALLENGER</Text></View></View>;
+  if (kind === 'learn') return <View style={styles.learnScene}><View style={[styles.orbit, styles.orbitOne]} /><View style={[styles.orbit, styles.orbitTwo]} /><View style={[styles.topicCard, styles.topicCardOne]}><Text style={styles.topicIcon}>⌘</Text><Text style={[styles.topicLabel, {color: colors.blue}]}>TECH</Text></View><View style={[styles.topicCard, styles.topicCardTwo]}><Text style={styles.topicIcon}>✦</Text><Text style={[styles.topicLabel, {color: colors.pink}]}>CREATIVE</Text></View><View style={[styles.topicCard, styles.topicCardThree]}><Text style={styles.topicIcon}>◉</Text><Text style={[styles.topicLabel, {color: colors.orange}]}>TRIVIA</Text></View><View style={styles.heroDisc}><Image source={images.logo} resizeMode="contain" style={styles.learnLogo} /></View><View style={styles.xpChip}><Text style={styles.xpText}>+25 XP</Text></View></View>;
+  return <View style={styles.adventureScene}><View style={styles.rainbowOne} /><View style={styles.rainbowTwo} /><View style={styles.rainbowThree} /><View style={styles.adventurePortrait}><Text style={styles.compassIcon}>✦</Text><Text style={styles.compassTitle}>YOUR PATH</Text><Text style={styles.compassSub}>Goals that grow with you</Text></View><View style={[styles.levelChip, styles.levelChipOne]}><Text style={styles.levelChipText}>DISCOVER</Text><Text style={styles.levelChipSub}>TRY SOMETHING NEW</Text></View><View style={[styles.levelChip, styles.levelChipTwo]}><Text style={styles.levelChipText}>PRACTISE</Text><Text style={styles.levelChipSub}>BUILD YOUR SKILLS</Text></View><View style={[styles.levelChip, styles.levelChipThree]}><Text style={styles.levelChipText}>MASTER</Text><Text style={styles.levelChipSub}>TAKE ON MORE</Text></View></View>;
 }
 
 function RewardArtwork() {
@@ -98,7 +94,7 @@ function Welcome({onStart}: {onStart: () => void}) {
 
 function LoginWebView() {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView source={{uri: 'https://cedugames.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView source={{uri: 'https://cedu.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
 }
 
 const styles = StyleSheet.create({
