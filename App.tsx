@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Animated, Easing, FlatList, Image, ImageBackground, ListRenderItemInfo, NativeScrollEvent, NativeSyntheticEvent, Pressable, StatusBar, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {ActivityIndicator, Animated, BackHandler, Easing, FlatList, Image, ImageBackground, ListRenderItemInfo, NativeScrollEvent, NativeSyntheticEvent, Pressable, StatusBar, StyleSheet, Text, ToastAndroid, useWindowDimensions, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
@@ -112,7 +112,33 @@ function Welcome({onStart}: {onStart: () => void}) {
 
 function LoginWebView() {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView source={{uri: 'https://cedu.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
+  const webViewRef = useRef<{goBack: () => void} | null>(null);
+  const canGoBackRef = useRef(false);
+  const lastBackPressRef = useRef(0);
+
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (canGoBackRef.current) {
+        webViewRef.current?.goBack();
+        return true;
+      }
+
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        BackHandler.exitApp();
+        return true;
+      }
+
+      lastBackPressRef.current = now;
+      ToastAndroid.show('Click back again to close the app', ToastAndroid.SHORT);
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => subscription.remove();
+  }, []);
+
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as {goBack: () => void};}} source={{uri: 'https://cedu.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
 }
 
 const styles = StyleSheet.create({
