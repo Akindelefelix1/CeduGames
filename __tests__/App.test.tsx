@@ -15,6 +15,18 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(() => Promise.resolve()),
 }));
 
+jest.mock('@react-native-firebase/app', () => ({
+  getApps: jest.fn(() => []),
+}));
+
+jest.mock('@react-native-firebase/messaging', () => ({
+  getMessaging: jest.fn(() => ({})),
+  getToken: jest.fn(),
+  onMessage: jest.fn(() => jest.fn()),
+  onTokenRefresh: jest.fn(() => jest.fn()),
+  requestPermission: jest.fn(),
+}));
+
 import App from '../App';
 
 test('renders correctly', async () => {
