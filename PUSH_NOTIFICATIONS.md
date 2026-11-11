@@ -67,7 +67,7 @@ Deploy the backend changes after setting the two secrets. Its production start c
 
 1. Install/open the updated app, sign into a player account, and allow notifications when Android prompts. Android 13 and newer require the user to grant notification permission; the app requests it after sign-in. [Android notification permission](https://firebase.google.com/docs/cloud-messaging/android/get-started#request_runtime_notification_permission_on_android_13)
 2. In the admin app, open **Notifications → Send New Notification**, enter a title and message, choose the audience/players, and send immediately.
-3. Check **Notifications → Push campaigns**. `sent` with a positive “ok” count means FCM accepted delivery for registered devices. `sent` with zero means no matching devices have registered yet. `not_configured` means backend Firebase secrets are missing; `failed` or a nonzero failure count indicates token/configuration or delivery errors.
+3. Check **Notifications → Push campaigns**. `sent` with a positive “ok” count means FCM accepted delivery for registered devices. `no devices` means no matching devices have registered yet. `not_configured` means backend Firebase secrets are missing; `failed` or a nonzero failure count indicates token/configuration or delivery errors. Android 13+ displays a permission prompt after sign-in; if it was denied, enable notifications in Android Settings and sign in again.
 4. Test both foreground (the app shows an alert) and background/closed states (Android displays the notification). Confirm the matching in-app notification also appears in the player notification centre.
 
 ## Common checks

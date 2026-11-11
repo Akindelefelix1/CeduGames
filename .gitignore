@@ -37,6 +37,12 @@ keystore.properties
 !debug.keystore
 .kotlin/
 
+# Firebase client configuration and private service-account credentials
+**/google-services.json
+**/GoogleService-Info.plist
+**/*firebase-adminsdk*.json
+**/*service-account*.json
+
 # node.js
 #
 node_modules/

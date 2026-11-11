@@ -1,10 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Animated, BackHandler, Easing, FlatList, Image, ImageBackground, ListRenderItemInfo, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, StatusBar, StyleSheet, Text, ToastAndroid, useWindowDimensions, View} from 'react-native';
+import {ActivityIndicator, Alert, Animated, BackHandler, Easing, FlatList, Image, ImageBackground, ListRenderItemInfo, NativeScrollEvent, NativeSyntheticEvent, PermissionsAndroid, Platform, Pressable, StatusBar, StyleSheet, Text, ToastAndroid, useWindowDimensions, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 import {getApps} from '@react-native-firebase/app';
-import {getMessaging, getToken, onMessage, onTokenRefresh, requestPermission} from '@react-native-firebase/messaging';
+import {AuthorizationStatus, getMessaging, getToken, onMessage, onTokenRefresh, requestPermission} from '@react-native-firebase/messaging';
 
 const API_URL = 'https://cedugames-backend.onrender.com';
 
@@ -29,7 +29,11 @@ function App() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   useEffect(() => {
-    AsyncStorage.getItem('onboarding-complete').then(value => setOnboardingComplete(value === 'true')).catch(() => setOnboardingComplete(false));
+    AsyncStorage.getItem('onboarding-complete').then(value => {
+      const complete = value === 'true';
+      setOnboardingComplete(complete);
+      if (complete) setShowLogin(true);
+    }).catch(() => setOnboardingComplete(false));
   }, []);
   const completeOnboarding = () => {
     setOnboardingComplete(true);
@@ -124,26 +128,54 @@ function LoginWebView() {
 
   const registerPushToken = async (sessionToken: string, pushToken: string) => {
     if (!sessionToken || !pushToken) return;
-    try {
-      await fetch(`${API_URL}/notifications/device-token`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}`},
-        body: JSON.stringify({token: pushToken, platform: Platform.OS === 'ios' ? 'ios' : 'android'}),
-      });
-    } catch (_) {}
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(`${API_URL}/notifications/device-token`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}`},
+          body: JSON.stringify({token: pushToken, platform: Platform.OS === 'ios' ? 'ios' : 'android'}),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.message || `Device registration failed (${response.status}).`);
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) await new Promise<void>(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Device registration failed.');
   };
 
   const syncPushToken = async (sessionToken: string) => {
     sessionTokenRef.current = sessionToken;
-    if (!getApps().length) return;
+    if (!getApps().length) {
+      Alert.alert('Push notifications unavailable', 'Firebase is not configured in this app build. Install a build with the Cedu Firebase configuration to receive push notifications.');
+      return;
+    }
     try {
       const messagingInstance = getMessaging();
-      await requestPermission(messagingInstance);
+      if (Platform.OS === 'android' && Number(Platform.Version) >= 33) {
+        const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+        if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Notifications are turned off', 'Allow CeduGames notifications in your device settings to receive push messages.');
+          return;
+        }
+      } else if (Platform.OS === 'ios') {
+        const permission = await requestPermission(messagingInstance);
+        if (permission === AuthorizationStatus.DENIED) {
+          Alert.alert('Notifications are turned off', 'Allow CeduGames notifications in your device settings to receive push messages.');
+          return;
+        }
+      }
       const token = await getToken(messagingInstance);
       pushTokenRef.current = token;
       await registerPushToken(sessionToken, token);
-    } catch (_) {
-      // Firebase platform files and notification permission are required to issue a device token.
+    } catch (error) {
+      console.warn('Push device registration failed', error);
+      Alert.alert('Push setup needs attention', error instanceof Error ? error.message : 'CeduGames could not register this device for push notifications.');
     }
   };
 
@@ -174,7 +206,10 @@ function LoginWebView() {
     const messagingInstance = getMessaging();
     const unsubscribeToken = onTokenRefresh(messagingInstance, token => {
       pushTokenRef.current = token;
-      if (sessionTokenRef.current) void registerPushToken(sessionTokenRef.current, token);
+      if (sessionTokenRef.current) void registerPushToken(sessionTokenRef.current, token).catch(error => {
+        console.warn('Refreshed push token registration failed', error);
+        Alert.alert('Push setup needs attention', 'CeduGames could not update this device registration. Sign in again to retry.');
+      });
     });
     const unsubscribeForeground = onMessage(messagingInstance, async message => {
       if (message.notification?.title || message.notification?.body) Alert.alert(message.notification.title || 'CeduGames', message.notification.body || 'You have a new notification.');
@@ -182,11 +217,10 @@ function LoginWebView() {
     return () => {unsubscribeToken(); unsubscribeForeground();};
   }, []);
 
-  const onWebMessage = (event: {nativeEvent: {data: string; url?: string}}) => {
-    if (!event.nativeEvent.url?.startsWith('https://cedu.cephassuite.com/')) return;
+  const onWebMessage = (event: {nativeEvent: {data: string}}) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
-      if (message.type === 'cedu-session' && typeof message.token === 'string' && message.token !== sessionTokenRef.current) {
+      if (message.type === 'cedu-session' && message.origin === 'https://cedu.cephassuite.com' && typeof message.token === 'string' && message.token !== sessionTokenRef.current) {
         if (message.token) void syncPushToken(message.token);
         else if (sessionTokenRef.current && pushTokenRef.current) {
           void fetch(`${API_URL}/notifications/device-token`, {method: 'DELETE', headers: {'Content-Type': 'application/json', Authorization: `Bearer ${sessionTokenRef.current}`}, body: JSON.stringify({token: pushTokenRef.current})}).catch(() => undefined);
@@ -201,12 +235,12 @@ function LoginWebView() {
       if (location.origin !== 'https://cedu.cephassuite.com' || window.__ceduPushSessionBridge) return;
       window.__ceduPushSessionBridge = true;
       var last = null;
-      var send = function(){ try { var token = localStorage.getItem('DATA_TOKEN') || ''; if (token !== last) { last = token; window.ReactNativeWebView.postMessage(JSON.stringify({type:'cedu-session',token:token})); } } catch (_) {} };
+      var send = function(){ try { var token = localStorage.getItem('cedugames_user_token') || sessionStorage.getItem('cedugames_user_token') || ''; if (token !== last) { last = token; window.ReactNativeWebView.postMessage(JSON.stringify({type:'cedu-session',origin:location.origin,token:token})); } } catch (_) {} };
       send(); setInterval(send, 1200);
     })(); true;
   `;
 
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as {goBack: () => void};}} source={{uri: 'https://cedu.cephassuite.com/login'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as {goBack: () => void};}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
 }
 
 const styles = StyleSheet.create({
