@@ -129,8 +129,15 @@ function LoginWebView() {
   const [pushNotice, setPushNotice] = useState<{title: string; body: string} | null>(null);
   const pushNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openNotificationInbox = () => {
+    if (pushNoticeTimerRef.current) clearTimeout(pushNoticeTimerRef.current);
+    pushNoticeTimerRef.current = null;
     setPushNotice(null);
     webViewRef.current?.injectJavaScript("window.location.href='/notification'; true;");
+  };
+  const dismissPushNotice = () => {
+    if (pushNoticeTimerRef.current) clearTimeout(pushNoticeTimerRef.current);
+    pushNoticeTimerRef.current = null;
+    setPushNotice(null);
   };
 
   const registerPushToken = async (sessionToken: string, pushToken: string) => {
@@ -223,7 +230,7 @@ function LoginWebView() {
       const body = message.notification?.body || String(message.data?.message || 'You have a new notification.');
       setPushNotice({title, body});
       if (pushNoticeTimerRef.current) clearTimeout(pushNoticeTimerRef.current);
-      pushNoticeTimerRef.current = setTimeout(() => setPushNotice(null), 7000);
+      pushNoticeTimerRef.current = setTimeout(dismissPushNotice, 5000);
     };
     const unsubscribeForeground = onMessage(messagingInstance, showPushNotice);
     const unsubscribeOpened = onNotificationOpenedApp(messagingInstance, openNotificationInbox);
@@ -254,7 +261,7 @@ function LoginWebView() {
     })(); true;
   `;
 
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as typeof webViewRef.current;}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} />{pushNotice && <Pressable accessibilityRole="button" accessibilityLabel={`Open notification: ${pushNotice.title}`} onPress={openNotificationInbox} style={[styles.pushToast, {top: insets.top + 12}]}><Image source={images.appIcon} resizeMode="contain" style={styles.pushToastIcon} /><View style={styles.pushToastCopy}><Text numberOfLines={1} style={styles.pushToastTitle}>{pushNotice.title}</Text><Text numberOfLines={2} style={styles.pushToastBody}>{pushNotice.body}</Text><Text style={styles.pushToastHint}>Tap to view in notifications</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={10} onPress={() => setPushNotice(null)} style={styles.pushToastClose}><Text style={styles.pushToastCloseText}>×</Text></Pressable></Pressable>}</View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as typeof webViewRef.current;}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} />{pushNotice && <Pressable accessibilityRole="button" accessibilityLabel={`Open notification: ${pushNotice.title}`} onPress={openNotificationInbox} style={[styles.pushToast, {top: insets.top + 12}]}><Image source={images.appIcon} resizeMode="contain" style={styles.pushToastIcon} /><View style={styles.pushToastCopy}><Text numberOfLines={1} style={styles.pushToastTitle}>{pushNotice.title}</Text><Text numberOfLines={2} style={styles.pushToastBody}>{pushNotice.body}</Text><Text style={styles.pushToastHint}>Tap to view in notifications</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={10} onPress={dismissPushNotice} style={styles.pushToastClose}><Text style={styles.pushToastCloseText}>×</Text></Pressable></Pressable>}</View>;
 }
 
 const styles = StyleSheet.create({
