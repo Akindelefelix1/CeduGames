@@ -5,6 +5,8 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {WebView} from 'react-native-webview';
 import {getApps} from '@react-native-firebase/app';
 import {AuthorizationStatus, getInitialNotification, getMessaging, getToken, onMessage, onNotificationOpenedApp, onTokenRefresh, requestPermission} from '@react-native-firebase/messaging';
+import SpInAppUpdates, {IAUInstallStatus, IAUUpdateKind} from 'sp-react-native-in-app-updates';
+import {getBuildNumber} from 'react-native-device-info';
 
 const API_URL = 'https://cedugames-backend.onrender.com';
 
@@ -41,6 +43,35 @@ function App() {
     AsyncStorage.setItem('onboarding-complete', 'true').catch(() => undefined);
   };
   const loading = showSplash || onboardingComplete === null;
+  useEffect(() => {
+    if (loading || Platform.OS !== 'android') return;
+
+    const updates = new SpInAppUpdates(__DEV__);
+    let active = true;
+    const onUpdateStatus = ({status}: {status: number}) => {
+      if (status === IAUInstallStatus.DOWNLOADED) updates.installUpdate();
+    };
+
+    updates.addStatusUpdateListener(onUpdateStatus);
+    updates.checkNeedsUpdate({
+      curVersion: getBuildNumber(),
+      customVersionComparator: (storeVersion, installedVersion) => {
+        const difference = Number(storeVersion) - Number(installedVersion);
+        return difference > 0 ? 1 : difference < 0 ? -1 : 0;
+      },
+    }).then(result => {
+      if (active && result.shouldUpdate) {
+        return updates.startUpdate({updateType: IAUUpdateKind.FLEXIBLE});
+      }
+    }).catch(() => {
+      // Play update checks can fail offline or for builds not installed through Play.
+    });
+
+    return () => {
+      active = false;
+      updates.removeStatusUpdateListener(onUpdateStatus);
+    };
+  }, [loading]);
   return <SafeAreaProvider><StatusBar barStyle={loading ? 'light-content' : 'dark-content'} />{loading ? <AnimatedSplash onComplete={() => setShowSplash(false)} /> : showLogin ? <LoginWebView /> : onboardingComplete ? <Welcome onStart={() => setShowLogin(true)} /> : <Onboarding onComplete={completeOnboarding} />}</SafeAreaProvider>;
 }
 
