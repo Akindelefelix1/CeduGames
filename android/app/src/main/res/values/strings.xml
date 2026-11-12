@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">CeduApp</string>
+    <string name="cedu_notification_channel_id">cedu_updates</string>
+    <string name="cedu_notification_channel_name">Cedu updates</string>
+    <string name="cedu_notification_channel_description">Important updates and messages from Cedu.</string>
 </resources>

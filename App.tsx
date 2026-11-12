@@ -4,12 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 import {getApps} from '@react-native-firebase/app';
-import {AuthorizationStatus, getMessaging, getToken, onMessage, onTokenRefresh, requestPermission} from '@react-native-firebase/messaging';
+import {AuthorizationStatus, getInitialNotification, getMessaging, getToken, onMessage, onNotificationOpenedApp, onTokenRefresh, requestPermission} from '@react-native-firebase/messaging';
 
 const API_URL = 'https://cedugames-backend.onrender.com';
 
 const images = {
   logo: require('./src/assets/images/cedugames-logo.png'),
+  appIcon: require('./src/assets/images/app-icon-1024.png'),
   splash: require('./src/assets/images/splash-background.png'),
   discovery: require('./src/assets/images/discovery-compass.png'),
   coin: require('./src/assets/images/reward-coin.png'),
@@ -120,11 +121,17 @@ function Welcome({onStart}: {onStart: () => void}) {
 
 function LoginWebView() {
   const insets = useSafeAreaInsets();
-  const webViewRef = useRef<{goBack: () => void} | null>(null);
+  const webViewRef = useRef<{goBack: () => void; injectJavaScript: (script: string) => void} | null>(null);
   const canGoBackRef = useRef(false);
   const lastBackPressRef = useRef(0);
   const sessionTokenRef = useRef('');
   const pushTokenRef = useRef('');
+  const [pushNotice, setPushNotice] = useState<{title: string; body: string} | null>(null);
+  const pushNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openNotificationInbox = () => {
+    setPushNotice(null);
+    webViewRef.current?.injectJavaScript("window.location.href='/notification'; true;");
+  };
 
   const registerPushToken = async (sessionToken: string, pushToken: string) => {
     if (!sessionToken || !pushToken) return;
@@ -211,10 +218,17 @@ function LoginWebView() {
         Alert.alert('Push setup needs attention', 'CeduGames could not update this device registration. Sign in again to retry.');
       });
     });
-    const unsubscribeForeground = onMessage(messagingInstance, async message => {
-      if (message.notification?.title || message.notification?.body) Alert.alert(message.notification.title || 'CeduGames', message.notification.body || 'You have a new notification.');
-    });
-    return () => {unsubscribeToken(); unsubscribeForeground();};
+    const showPushNotice = (message: {notification?: {title?: string; body?: string}; data?: {[key: string]: string | object}}) => {
+      const title = message.notification?.title || String(message.data?.title || 'CeduGames');
+      const body = message.notification?.body || String(message.data?.message || 'You have a new notification.');
+      setPushNotice({title, body});
+      if (pushNoticeTimerRef.current) clearTimeout(pushNoticeTimerRef.current);
+      pushNoticeTimerRef.current = setTimeout(() => setPushNotice(null), 7000);
+    };
+    const unsubscribeForeground = onMessage(messagingInstance, showPushNotice);
+    const unsubscribeOpened = onNotificationOpenedApp(messagingInstance, openNotificationInbox);
+    void getInitialNotification(messagingInstance).then(message => {if (message) openNotificationInbox();});
+    return () => {unsubscribeToken(); unsubscribeForeground(); unsubscribeOpened(); if (pushNoticeTimerRef.current) clearTimeout(pushNoticeTimerRef.current);};
   }, []);
 
   const onWebMessage = (event: {nativeEvent: {data: string}}) => {
@@ -240,7 +254,7 @@ function LoginWebView() {
     })(); true;
   `;
 
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as {goBack: () => void};}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} /></View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as typeof webViewRef.current;}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} />{pushNotice && <Pressable accessibilityRole="button" accessibilityLabel={`Open notification: ${pushNotice.title}`} onPress={openNotificationInbox} style={[styles.pushToast, {top: insets.top + 12}]}><Image source={images.appIcon} resizeMode="contain" style={styles.pushToastIcon} /><View style={styles.pushToastCopy}><Text numberOfLines={1} style={styles.pushToastTitle}>{pushNotice.title}</Text><Text numberOfLines={2} style={styles.pushToastBody}>{pushNotice.body}</Text><Text style={styles.pushToastHint}>Tap to view in notifications</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={10} onPress={() => setPushNotice(null)} style={styles.pushToastClose}><Text style={styles.pushToastCloseText}>×</Text></Pressable></Pressable>}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -252,6 +266,6 @@ const styles = StyleSheet.create({
   bottomBar: {backgroundColor: '#FFF', paddingHorizontal: 22, paddingTop: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#311150', shadowOffset: {width: 0, height: -10}, shadowOpacity: .08, shadowRadius: 20, elevation: 12}, progressLabel: {fontFamily: 'Baloo2-Bold', color: '#AAA0B2', fontSize: 8, letterSpacing: 1.3, marginBottom: 7}, pagination: {flexDirection: 'row', alignItems: 'center', gap: 7}, pageDot: {width: 9, height: 9, borderRadius: 5, backgroundColor: '#DDD6E5'}, pageDotActive: {width: 34}, nextButton: {height: 58, minWidth: 158, borderRadius: 22, paddingLeft: 22, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 13, overflow: 'hidden', shadowColor: '#352043', shadowOffset: {width: 0, height: 9}, shadowOpacity: .25, shadowRadius: 13, elevation: 6}, nextText: {fontFamily: 'Baloo2-Bold', fontSize: 17, color: '#FFF', zIndex: 2}, arrowCircle: {width: 44, height: 44, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', zIndex: 2}, nextArrow: {fontFamily: 'Baloo2-Regular', fontSize: 34, lineHeight: 38, marginTop: -4}, pressed: {opacity: .84, transform: [{scale: .98}]},
   rewardArt: {width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center'}, rewardHalo: {position: 'absolute', width: 290, height: 290, borderRadius: 145, backgroundColor: 'rgba(255,255,255,.18)', borderWidth: 22, borderColor: 'rgba(255,255,255,.12)'}, trophy: {width: 205, height: 270, zIndex: 2}, coinLarge: {position: 'absolute', width: 112, height: 112, right: 16, top: 27, transform: [{rotate: '12deg'}]}, coinSmall: {position: 'absolute', width: 72, height: 72, left: 22, bottom: 56, transform: [{rotate: '-15deg'}]}, spark: {position: 'absolute', fontFamily: 'Baloo2-Bold', color: colors.yellow}, sparkOne: {fontSize: 45, left: 38, top: 34}, sparkTwo: {fontSize: 40, right: 40, bottom: 68, color: colors.pink}, badgeCard: {position: 'absolute', zIndex: 5, left: 10, top: 28, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 18, paddingVertical: 7, paddingHorizontal: 8, elevation: 7, transform: [{rotate: '-5deg'}]}, badgeImage: {width: 45, height: 45}, badgeTitle: {fontFamily: 'Baloo2-ExtraBold', color: colors.purple, fontSize: 12}, badgeSub: {fontFamily: 'Baloo2-Medium', color: '#81758D', fontSize: 9}, streakPill: {position: 'absolute', zIndex: 5, bottom: 22, backgroundColor: '#FFF', borderRadius: 20, paddingLeft: 16, paddingRight: 6, height: 48, flexDirection: 'row', alignItems: 'center', gap: 10, elevation: 6}, streakText: {fontFamily: 'Baloo2-ExtraBold', color: colors.ink, fontSize: 12}, streakFlame: {width: 36, height: 36, borderRadius: 13, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center'}, streakFlameText: {fontFamily: 'Baloo2-ExtraBold', color: '#FFF', fontSize: 16},
   welcome: {flex: 1, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center', padding: 28}, welcomeCircle: {width: 280, height: 280, borderRadius: 140, backgroundColor: '#F0E2FF', alignItems: 'center', justifyContent: 'center'}, welcomeLogo: {width: 250, height: 130}, welcomeTitle: {fontFamily: 'Baloo2-ExtraBold', color: colors.ink, fontSize: 30, textAlign: 'center', marginTop: 32}, welcomeDescription: {fontFamily: 'Baloo2-Medium', color: '#6F637D', fontSize: 17, marginTop: 6}, startButton: {marginTop: 28, height: 56, minWidth: 210, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.purple}, startText: {fontFamily: 'Baloo2-Bold', color: '#FFF', fontSize: 18},
-  webScreen: {flex: 1, backgroundColor: '#FFF'}, webView: {flex: 1}, webState: {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: colors.cream}, webLogo: {width: 230, height: 100, marginBottom: 24}, webStateText: {fontFamily: 'Baloo2-Medium', color: '#6F637D', fontSize: 16, textAlign: 'center', marginTop: 14}, webErrorTitle: {fontFamily: 'Baloo2-Bold', color: colors.ink, fontSize: 22, textAlign: 'center'},
+  webScreen: {flex: 1, backgroundColor: '#FFF'}, webView: {flex: 1}, pushToast: {position: 'absolute', left: 14, right: 14, zIndex: 20, minHeight: 82, borderRadius: 18, padding: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E9D9FF', elevation: 12, shadowColor: '#24123F', shadowOffset: {width: 0, height: 5}, shadowOpacity: .2, shadowRadius: 12}, pushToastIcon: {width: 54, height: 54, borderRadius: 13, backgroundColor: '#F6EEFF'}, pushToastCopy: {flex: 1, marginLeft: 12, marginRight: 6}, pushToastTitle: {fontFamily: 'Baloo2-Bold', color: colors.ink, fontSize: 15}, pushToastBody: {fontFamily: 'Baloo2-Medium', color: '#6F637D', fontSize: 13, marginTop: 1}, pushToastHint: {fontFamily: 'Baloo2-SemiBold', color: colors.purple, fontSize: 11, marginTop: 3}, pushToastClose: {width: 28, height: 36, alignItems: 'center', justifyContent: 'center'}, pushToastCloseText: {fontSize: 24, lineHeight: 27, color: '#9A8EAA'}, webState: {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: colors.cream}, webLogo: {width: 230, height: 100, marginBottom: 24}, webStateText: {fontFamily: 'Baloo2-Medium', color: '#6F637D', fontSize: 16, textAlign: 'center', marginTop: 14}, webErrorTitle: {fontFamily: 'Baloo2-Bold', color: colors.ink, fontSize: 22, textAlign: 'center'},
 });
 export default App;
