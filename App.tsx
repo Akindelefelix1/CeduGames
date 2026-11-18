@@ -9,11 +9,13 @@ import SpInAppUpdates, {IAUInstallStatus, IAUUpdateKind} from 'sp-react-native-i
 import {getBuildNumber} from 'react-native-device-info';
 
 const API_URL = 'https://cedugames-backend.onrender.com';
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_CHECK_DELAY_MS = 10 * 1000;
 
 const images = {
   logo: require('./src/assets/images/cedugames-logo.png'),
   appIcon: require('./src/assets/images/app-icon-1024.png'),
-  splash: require('./src/assets/images/splash-background.png'),
+  splash: require('./src/assets/images/splash-background.jpg'),
   discovery: require('./src/assets/images/discovery-compass.png'),
   coin: require('./src/assets/images/reward-coin.png'),
   trophy: require('./src/assets/images/reward-trophy-realistic.png'),
@@ -48,27 +50,41 @@ function App() {
 
     const updates = new SpInAppUpdates(__DEV__);
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const onUpdateStatus = ({status}: {status: number}) => {
       if (status === IAUInstallStatus.DOWNLOADED) updates.installUpdate();
     };
+    const checkForUpdate = () => {
+      if (!active) return;
+      void AsyncStorage.setItem('play-update-last-check', String(Date.now())).catch(() => undefined);
+      updates.addStatusUpdateListener(onUpdateStatus);
+      updates.checkNeedsUpdate({
+        curVersion: getBuildNumber(),
+        customVersionComparator: (storeVersion, installedVersion) => {
+          const difference = Number(storeVersion) - Number(installedVersion);
+          return difference > 0 ? 1 : difference < 0 ? -1 : 0;
+        },
+      }).then(result => {
+        if (active && result.shouldUpdate) {
+          return updates.startUpdate({updateType: IAUUpdateKind.FLEXIBLE});
+        }
+      }).catch(() => {
+        // Play update checks can fail offline or for builds not installed through Play.
+      });
+    };
 
-    updates.addStatusUpdateListener(onUpdateStatus);
-    updates.checkNeedsUpdate({
-      curVersion: getBuildNumber(),
-      customVersionComparator: (storeVersion, installedVersion) => {
-        const difference = Number(storeVersion) - Number(installedVersion);
-        return difference > 0 ? 1 : difference < 0 ? -1 : 0;
-      },
-    }).then(result => {
-      if (active && result.shouldUpdate) {
-        return updates.startUpdate({updateType: IAUUpdateKind.FLEXIBLE});
+    AsyncStorage.getItem('play-update-last-check').then(lastCheck => {
+      const lastCheckedAt = Number(lastCheck || 0);
+      if (active && Date.now() - lastCheckedAt >= UPDATE_CHECK_INTERVAL_MS) {
+        timer = setTimeout(checkForUpdate, UPDATE_CHECK_DELAY_MS);
       }
     }).catch(() => {
-      // Play update checks can fail offline or for builds not installed through Play.
+      if (active) timer = setTimeout(checkForUpdate, UPDATE_CHECK_DELAY_MS);
     });
 
     return () => {
       active = false;
+      if (timer) clearTimeout(timer);
       updates.removeStatusUpdateListener(onUpdateStatus);
     };
   }, [loading]);
@@ -99,7 +115,7 @@ function AnimatedSplash({onComplete}: {onComplete: () => void}) {
       Animated.timing(breathe, {toValue: 1, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: true}),
     ]));
     logoEntrance.start(({finished}) => finished && logoBreathing.start());
-    const timer = setTimeout(onComplete, 2200);
+    const timer = setTimeout(onComplete, 900);
     return () => {clearTimeout(timer); logoEntrance.stop(); logoBreathing.stop(); dotAnimations.forEach(animation => animation.stop());};
   }, [breathe, dots, lift, onComplete, opacity, scale]);
   return <ImageBackground source={images.splash} style={styles.splash} resizeMode="cover"><View style={styles.splashShade} /><Animated.View style={[styles.splashLogoFrame, {opacity, transform: [{translateY: lift}, {scale}, {scale: breathe}]}]}><Image source={images.logo} resizeMode="contain" style={styles.splashLogo} /></Animated.View><Text style={styles.splashMessage}>Loading your adventure...</Text><View style={styles.loadingDots}>{dots.map((value, index) => <Animated.View key={index} style={[styles.loadingDot, {backgroundColor: [colors.red, colors.yellow, colors.blue][index], transform: [{translateY: value}]}]} />)}</View></ImageBackground>;
@@ -288,11 +304,14 @@ function LoginWebView() {
       window.__ceduPushSessionBridge = true;
       var last = null;
       var send = function(){ try { var token = localStorage.getItem('cedugames_user_token') || sessionStorage.getItem('cedugames_user_token') || ''; if (token !== last) { last = token; window.ReactNativeWebView.postMessage(JSON.stringify({type:'cedu-session',origin:location.origin,token:token})); } } catch (_) {} };
-      send(); setInterval(send, 1200);
+      send();
+      window.addEventListener('cedugames:session-updated', send);
+      window.addEventListener('storage', send);
+      document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') send(); });
     })(); true;
   `;
 
-  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as typeof webViewRef.current;}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} androidLayerType="software" javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} />{pushNotice && <Pressable accessibilityRole="button" accessibilityLabel={`Open notification: ${pushNotice.title}`} onPress={openNotificationInbox} style={[styles.pushToast, {top: insets.top + 12}]}><Image source={images.appIcon} resizeMode="contain" style={styles.pushToastIcon} /><View style={styles.pushToastCopy}><Text numberOfLines={1} style={styles.pushToastTitle}>{pushNotice.title}</Text><Text numberOfLines={2} style={styles.pushToastBody}>{pushNotice.body}</Text><Text style={styles.pushToastHint}>Tap to view in notifications</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={10} onPress={dismissPushNotice} style={styles.pushToastClose}><Text style={styles.pushToastCloseText}>×</Text></Pressable></Pressable>}</View>;
+  return <View style={[styles.webScreen, {paddingTop: insets.top}]}><WebView ref={instance => {webViewRef.current = instance as unknown as typeof webViewRef.current;}} source={{uri: 'https://cedu.cephassuite.com/profiles'}} style={styles.webView} scrollEnabled nestedScrollEnabled={Platform.OS === 'android'} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled injectedJavaScript={sessionBridge} onMessage={onWebMessage} startInLoadingState onNavigationStateChange={({canGoBack}) => {canGoBackRef.current = canGoBack; lastBackPressRef.current = 0;}} renderLoading={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><ActivityIndicator size="large" color={colors.purple} /><Text style={styles.webStateText}>Opening your adventure...</Text></View>} renderError={() => <View style={styles.webState}><Image source={images.logo} resizeMode="contain" style={styles.webLogo} /><Text style={styles.webErrorTitle}>We couldn't open the login page</Text><Text style={styles.webStateText}>Check your internet connection and try again.</Text></View>} />{pushNotice && <Pressable accessibilityRole="button" accessibilityLabel={`Open notification: ${pushNotice.title}`} onPress={openNotificationInbox} style={[styles.pushToast, {top: insets.top + 12}]}><Image source={images.appIcon} resizeMode="contain" style={styles.pushToastIcon} /><View style={styles.pushToastCopy}><Text numberOfLines={1} style={styles.pushToastTitle}>{pushNotice.title}</Text><Text numberOfLines={2} style={styles.pushToastBody}>{pushNotice.body}</Text><Text style={styles.pushToastHint}>Tap to view in notifications</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={10} onPress={dismissPushNotice} style={styles.pushToastClose}><Text style={styles.pushToastCloseText}>×</Text></Pressable></Pressable>}</View>;
 }
 
 const styles = StyleSheet.create({
